@@ -1,6 +1,8 @@
 import logging
 
 from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from app.database.repositories.item_repo import ItemRepository
 from app.database.repositories.user_repo import UserRepository
@@ -11,10 +13,25 @@ from app.services.tracking_service import TrackingServiceImpl
 logger = logging.getLogger(__name__)
 
 
-async def check_all_prices(bot: Bot) -> None:
-    """Фоновая задача: проверяет цены и уведомляет при достижении целевой."""
+async def check_all_prices(bot_token: str) -> None:
+    """Фоновая задача: проверяет цены и уведомляет при достижении целевой.
+
+    В Redis-хранение APScheduler задача попадает через pickle, поэтому в неё
+    можно передавать только сериализуемые значения — токен, а не объект Bot.
+    """
     logger.info("Starting background price check...")
 
+    bot = Bot(
+        token=bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await _check_all_prices(bot)
+    finally:
+        await bot.session.close()
+
+
+async def _check_all_prices(bot: Bot) -> None:
     async with async_session_factory() as session:
         user_repo = UserRepository(session)
         item_repo = ItemRepository(session)

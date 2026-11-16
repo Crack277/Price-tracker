@@ -55,7 +55,7 @@ async def main() -> None:
         check_all_prices,
         trigger="interval",
         minutes=settings.price_check_interval_minutes,
-        args=[bot],
+        args=[settings.bot_token.get_secret_value()],
         id="check_all_prices",
         replace_existing=True,
     )
