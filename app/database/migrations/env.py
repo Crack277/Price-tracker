@@ -10,7 +10,7 @@ from app.database import models  # noqa: F401 — чтобы Alembic видел 
 
 config = context.config
 
-# Используем синхронный URL с psycopg2 для миграций
+# Используем синхронный URL с psycopg (v3) для миграций
 config.set_main_option("sqlalchemy.url", get_settings().sync_database_url)
 
 target_metadata = Base.metadata

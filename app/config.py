@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     def sync_database_url(self) -> str:
         password = self.db_password.get_secret_value()
         return (
-            f"postgresql+psycopg2://{self.db_user}:{password}"
+            f"postgresql+psycopg://{self.db_user}:{password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
 
