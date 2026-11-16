@@ -168,6 +168,10 @@ def _chrome_full_version() -> str | None:
         (winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\BLBeacon"),
         (winreg.HKEY_LOCAL_MACHINE, r"Software\Google\Chrome\BLBeacon"),
         (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Google\Chrome\BLBeacon"),
+        # Edge — fallback-браузер парсера, если Chrome не установлен
+        (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Edge\BLBeacon"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Edge\BLBeacon"),
+        (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Edge\BLBeacon"),
     ):
         try:
             with winreg.OpenKey(hive, path) as key:
@@ -538,6 +542,13 @@ class _SharedBrowser:
 
         _kill_orphan_browsers()
 
+        browser_exe = _find_browser_exe()
+        if browser_exe is None:
+            raise RuntimeError(
+                "Не найден браузер (chrome.exe/msedge.exe) — установите Chrome "
+                "или Edge, headless-парсер работает только через них"
+            )
+
         major = _chrome_major_version()
         options = uc.ChromeOptions()
         options.add_argument(f"--user-data-dir={user_data_dir.absolute()}")
@@ -569,10 +580,15 @@ class _SharedBrowser:
 
         if major:
             driver = uc.Chrome(
-                options=options, headless=headless, version_main=int(major)
+                options=options,
+                headless=headless,
+                version_main=int(major),
+                browser_executable_path=browser_exe,
             )
         else:
-            driver = uc.Chrome(options=options, headless=headless)
+            driver = uc.Chrome(
+                options=options, headless=headless, browser_executable_path=browser_exe
+            )
         return driver
 
     def _schedule_idle_shutdown(self) -> None:
@@ -600,17 +616,36 @@ _shared_browser = _SharedBrowser()
 # Посев доверия анти-бота настоящим Chrome (без автоматизации)
 # ---------------------------------------------------------------------------
 
-def _find_chrome_exe() -> str | None:
-    """Путь к установленному Chrome (тот же бинарник, что и у пользователя)."""
+def _find_browser_exe() -> str | None:
+    """Путь к Chromium-браузеру: сначала Chrome, затем Edge (fallback)."""
     candidates = (
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         str(Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe"),
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     )
     for path in candidates:
         if Path(path).exists():
             return path
+    # Браузер могли установить не в стандартные папки — смотрим реестр
+    for name in ("chrome.exe", "msedge.exe"):
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{name}",
+            ) as key:
+                exe = winreg.QueryValueEx(key, "")[0]
+                if exe and Path(exe).exists():
+                    return exe
+        except OSError:
+            continue
     return None
+
+
+def _find_chrome_exe() -> str | None:
+    """Путь к установленному браузеру (тот же бинарник, что и у пользователя)."""
+    return _find_browser_exe()
 
 
 def _profile_has_ozon_trust() -> bool:
